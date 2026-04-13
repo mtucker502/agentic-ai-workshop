@@ -25,7 +25,7 @@
         name: "workshop-vm-{{ '%02d' | format(item) }}"
         state: destroyed
       when: "'workshop-vm-' + '%02d' | format(item) in existing_vms.list_vms"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
       ignore_errors: true
 
     - name: Undefine workshop VMs
@@ -33,7 +33,7 @@
         name: "workshop-vm-{{ '%02d' | format(item) }}"
         command: undefine
       when: "'workshop-vm-' + '%02d' | format(item) in existing_vms.list_vms"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
       ignore_errors: true
 
     # =========================================================================
@@ -43,7 +43,7 @@
       ansible.builtin.file:
         path: "{{ workshop_vm_images_dir }}/workshop-vm-{{ '%02d' | format(item) }}.qcow2"
         state: absent
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Remove cloud-init files
       ansible.builtin.file:
@@ -63,7 +63,7 @@
         to_destination: "{{ workshop_vm_subnet }}.{{ workshop_vm_ip_offset + item - 1 }}:22"
         comment: "workshop-vm-{{ '%02d' | format(item) }}-ssh"
         state: absent
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
       ignore_errors: true
 
     - name: Remove masquerade rule

@@ -21,6 +21,4 @@ packages:
 runcmd:
   - systemctl enable --now qemu-guest-agent
 
-power_state:
-  mode: reboot
-  condition: true
+final_message: "Cloud-init completed for workshop-vm-{{ '%02d' | format(vm_index) }}"

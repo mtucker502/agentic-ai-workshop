@@ -8,8 +8,8 @@ workshop_vm_disk_gb: 50
 # Networking
 workshop_vm_bridge: br-workshop
 workshop_vm_network_name: workshop-net
-workshop_vm_subnet: "192.168.122"
-workshop_vm_gateway: "192.168.122.1"
+workshop_vm_subnet: "192.168.100"
+workshop_vm_gateway: "192.168.100.1"
 workshop_vm_netmask: "255.255.255.0"
 workshop_vm_ip_offset: 11
 workshop_ssh_port_start: 2201
@@ -23,6 +23,9 @@ workshop_cloudinit_dir: "/var/lib/libvirt/cloud-init"
 
 # SSH - reads the operator's public key
 workshop_ssh_pubkey: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+# Host public address (for inventory SSH access via port forwarding)
+workshop_host_address: "dedicated.netzolt.com"
 
 # Generated inventory output path
 workshop_inventory_path: "{{ playbook_dir }}/inventory-workshop.ini"

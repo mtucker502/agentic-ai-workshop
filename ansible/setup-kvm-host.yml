@@ -67,7 +67,10 @@
         command: start
         name: "{{ workshop_vm_network_name }}"
       register: net_start
-      failed_when: net_start is failed and 'already active' not in (net_start.msg | default(''))
+      failed_when: >-
+        net_start is failed
+        and 'already active' not in (net_start.msg | default(''))
+        and 'already in use' not in (net_start.msg | default(''))
 
     - name: Set libvirt network to autostart
       community.libvirt.virt_net:
@@ -110,14 +113,14 @@
           {{ workshop_vm_images_dir }}/workshop-vm-{{ '%02d' | format(item) }}.qcow2
           {{ workshop_vm_disk_gb }}G
         creates: "{{ workshop_vm_images_dir }}/workshop-vm-{{ '%02d' | format(item) }}.qcow2"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Create per-VM cloud-init directories
       ansible.builtin.file:
         path: "{{ workshop_cloudinit_dir }}/vm-{{ '%02d' | format(item) }}"
         state: directory
         mode: "0755"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Generate cloud-init user-data for each VM
       ansible.builtin.template:
@@ -126,7 +129,7 @@
         mode: "0644"
       vars:
         vm_index: "{{ item }}"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Generate cloud-init network-config for each VM
       ansible.builtin.template:
@@ -135,7 +138,7 @@
         mode: "0644"
       vars:
         vm_index: "{{ item }}"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Create cloud-init meta-data for each VM
       ansible.builtin.copy:
@@ -144,7 +147,7 @@
           local-hostname: workshop-vm-{{ '%02d' | format(item) }}
         dest: "{{ workshop_cloudinit_dir }}/vm-{{ '%02d' | format(item) }}/meta-data"
         mode: "0644"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Create cloud-init ISOs
       ansible.builtin.command:
@@ -155,7 +158,7 @@
           {{ workshop_cloudinit_dir }}/vm-{{ '%02d' | format(item) }}/meta-data
           {{ workshop_cloudinit_dir }}/vm-{{ '%02d' | format(item) }}/network-config
         creates: "{{ workshop_cloudinit_dir }}/cidata-{{ '%02d' | format(item) }}.iso"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     - name: Check if VMs already exist
       community.libvirt.virt:
@@ -178,7 +181,7 @@
           --noautoconsole
           --import
       when: "'workshop-vm-' + '%02d' | format(item) not in existing_vms.list_vms"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     # =========================================================================
     # 6. Configure iptables NAT and port forwarding
@@ -208,18 +211,24 @@
         jump: DNAT
         to_destination: "{{ workshop_vm_subnet }}.{{ workshop_vm_ip_offset + item - 1 }}:22"
         comment: "workshop-vm-{{ '%02d' | format(item) }}-ssh"
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
-    - name: Add FORWARD ACCEPT rules for VM subnet
+    - name: Add FORWARD ACCEPT rules for DNAT traffic to VMs
       ansible.builtin.iptables:
         chain: FORWARD
-        source: "{{ workshop_vm_subnet }}.0/24"
+        action: insert
+        rule_num: "1"
+        destination: "{{ workshop_vm_subnet }}.0/24"
+        protocol: tcp
+        destination_port: "22"
         jump: ACCEPT
-        comment: "workshop-vm-forward-out"
+        comment: "workshop-vm-forward-ssh"
 
     - name: Add FORWARD ACCEPT rules for established connections to VMs
       ansible.builtin.iptables:
         chain: FORWARD
+        action: insert
+        rule_num: "1"
         destination: "{{ workshop_vm_subnet }}.0/24"
         ctstate:
           - ESTABLISHED
@@ -227,14 +236,14 @@
         jump: ACCEPT
         comment: "workshop-vm-forward-established"
 
-    - name: Add FORWARD ACCEPT rules for DNAT traffic to VMs
+    - name: Add FORWARD ACCEPT rules for VM subnet
       ansible.builtin.iptables:
         chain: FORWARD
-        destination: "{{ workshop_vm_subnet }}.0/24"
-        protocol: tcp
-        destination_port: "22"
+        action: insert
+        rule_num: "1"
+        source: "{{ workshop_vm_subnet }}.0/24"
         jump: ACCEPT
-        comment: "workshop-vm-forward-ssh"
+        comment: "workshop-vm-forward-out"
 
     - name: Save iptables rules
       ansible.builtin.command: netfilter-persistent save
@@ -260,7 +269,7 @@
         port: 22
         timeout: 300
         delay: 10
-      loop: "{{ range(1, workshop_vm_count + 1) | list }}"
+      loop: "{{ range(1, workshop_vm_count | int + 1) | list }}"
 
     # =========================================================================
     # 9. Display summary
@@ -273,11 +282,11 @@
           ========================================
           VMs created:     {{ workshop_vm_count }}
           VM subnet:       {{ workshop_vm_subnet }}.0/24
-          SSH port range:  {{ workshop_ssh_port_start }}-{{ workshop_ssh_port_start + workshop_vm_count - 1 }}
+          SSH port range:  {{ workshop_ssh_port_start }}-{{ workshop_ssh_port_start | int + workshop_vm_count | int - 1 }}
           Inventory file:  {{ workshop_inventory_path }}
 
           User access:
-          {% for i in range(1, workshop_vm_count + 1) %}
+          {% for i in range(1, workshop_vm_count | int + 1) %}
             VM {{ '%02d' | format(i) }}: ssh -p {{ workshop_ssh_port_start + i - 1 }} labuser@<host-public-ip>
           {% endfor %}
 
