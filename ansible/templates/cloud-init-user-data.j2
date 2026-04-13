@@ -1,0 +1,26 @@
+#cloud-config
+hostname: workshop-vm-{{ '%02d' | format(vm_index) }}
+manage_etc_hosts: true
+
+users:
+  - name: labuser
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {{ workshop_ssh_pubkey }}
+    lock_passwd: true
+
+ssh_pwauth: false
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - qemu-guest-agent
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+
+power_state:
+  mode: reboot
+  condition: true
